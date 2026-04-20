@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Fix Maamu - Professional Service</title>
+    <title>Fix Maamu - User App</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/9.1.3/firebase-app.js";
@@ -22,81 +22,13 @@
         let bookingType = "Instant";
         let adminWhatsApp = "919008272911";
 
-        onValue(ref(db, 'settings/adminPhone'), (snap) => {
-            if(snap.exists()) adminWhatsApp = snap.val();
-        });
-
-        window.speakKND = (text) => {
+        window.speakKND = (text, callback) => {
             window.speechSynthesis.cancel();
             const msg = new SpeechSynthesisUtterance(text);
             msg.lang = 'kn-IN';
-            msg.rate = 1.0;
+            msg.rate = 0.85; 
+            msg.onend = () => { if (callback) callback(); };
             window.speechSynthesis.speak(msg);
-        };
-
-        const getIcon = (name) => {
-            const n = name.toLowerCase();
-            if(n.includes('mopping') || n.includes('cleaning')) return '🧹';
-            if(n.includes('electric')) return '⚡';
-            if(n.includes('plumb')) return '🚰';
-            if(n.includes('cook')) return '🍳';
-            if(n.includes('iron')) return '💨';
-            if(n.includes('wash')) return '🧺';
-            return '🛠️';
-        };
-
-        // ವಾಯ್ಸ್ ಅಪ್ಡೇಟ್: "ಗಂಟೆ" ಪದದೊಂದಿಗೆ
-        window.updateSelection = (serviceName, hourLabel, price, btnId, qty) => {
-            cart[serviceName] = { label: qty + " ಗಂಟೆ", price: parseInt(price), qty: qty, base: (price/qty) };
-            
-            document.querySelectorAll(`[data-serv="${serviceName}"]`).forEach(b => {
-                b.classList.remove('bg-blue-600', 'border-blue-400');
-                b.classList.add('bg-slate-800', 'border-slate-700');
-            });
-            document.getElementById(btnId).classList.replace('bg-slate-800', 'bg-blue-600');
-            document.getElementById(`qty_${serviceName}`).innerText = qty;
-
-            speakKND(`${serviceName}, ${qty} ಗಂಟೆ, ${price} ರೂಪಾಯಿ.`);
-            updateTotal();
-        };
-
-        window.changeHours = (serviceName, basePrice, action) => {
-            if (!cart[serviceName]) {
-                cart[serviceName] = { label: "1 ಗಂಟೆ", price: basePrice, qty: 1, base: basePrice };
-            }
-            if (action === 'plus') cart[serviceName].qty += 1;
-            else if (action === 'minus' && cart[serviceName].qty > 0) cart[serviceName].qty -= 1;
-
-            if (cart[serviceName].qty === 0) {
-                delete cart[serviceName];
-                document.getElementById(`qty_${serviceName}`).innerText = "0";
-                document.querySelectorAll(`[data-serv="${serviceName}"]`).forEach(b => b.classList.replace('bg-blue-600', 'bg-slate-800'));
-            } else {
-                cart[serviceName].price = cart[serviceName].qty * cart[serviceName].base;
-                cart[serviceName].label = `${cart[serviceName].qty} ಗಂಟೆ`;
-                document.getElementById(`qty_${serviceName}`).innerText = cart[serviceName].qty;
-                speakKND(`${serviceName}, ${cart[serviceName].qty} ಗಂಟೆ, ${cart[serviceName].price} ರೂಪಾಯಿ.`);
-            }
-            updateTotal();
-        };
-
-        const updateTotal = () => {
-            let sub = 0;
-            for (let k in cart) sub += cart[k].price;
-            let final = sub - walletBalance;
-            document.getElementById('totalDisp').innerText = "Total: ₹" + (final < 0 ? 0 : final);
-        };
-
-        window.applyReferral = (val) => {
-            if(val.length === 10) {
-                walletBalance = 20;
-                document.getElementById('walletVal').innerText = "₹20";
-                speakKND("ರೆಫರಲ್ ಸಕ್ಸಸ್.");
-            } else {
-                walletBalance = 0;
-                document.getElementById('walletVal').innerText = "₹0";
-            }
-            updateTotal();
         };
 
         window.setBookingType = (type) => {
@@ -104,60 +36,79 @@
             document.getElementById('instBtn').className = type === 'Instant' ? "flex-1 bg-yellow-500 text-black font-black py-4 rounded-2xl italic uppercase text-xs" : "flex-1 bg-slate-800 text-white font-black py-4 rounded-2xl italic uppercase text-xs";
             document.getElementById('schBtn').className = type === 'Schedule' ? "flex-1 bg-yellow-500 text-black font-black py-4 rounded-2xl italic uppercase text-xs" : "flex-1 bg-slate-800 text-white font-black py-4 rounded-2xl italic uppercase text-xs";
             document.getElementById('scheduleFields').classList.toggle('hidden', type === 'Instant');
-            speakKND(type === 'Instant' ? "ತಕ್ಷಣದ ಬುಕಿಂಗ್" : "ಶೆಡ್ಯೂಲ್ ಬುಕಿಂಗ್");
+            speakKND(type === 'Instant' ? "ತಕ್ಷಣದ ಬುಕಿಂಗ್ ಆರಿಸಲಾಗಿದೆ." : "ಶೆಡ್ಯೂಲ್ ಬುಕಿಂಗ್ ಆರಿಸಲಾಗಿದೆ.");
+        };
+
+        window.updateSelection = (serviceName, price, btnId, qty) => {
+            cart[serviceName] = { label: qty + " ಗಂಟೆ", price: parseInt(price), qty: qty, base: (price/qty) };
+            document.querySelectorAll(`[data-serv="${serviceName}"]`).forEach(b => b.classList.replace('bg-blue-600', 'bg-slate-800'));
+            document.getElementById(btnId).classList.replace('bg-slate-800', 'bg-blue-600');
+            document.getElementById(`qty_${serviceName}`).innerText = qty;
+            speakKND(`${serviceName}, ${qty} ಗಂಟೆ, ${price} ರೂಪಾಯಿ.`);
+            updateTotal();
+        };
+
+        window.changeHours = (serviceName, basePrice, action) => {
+            if (!cart[serviceName]) cart[serviceName] = { label: "1 ಗಂಟೆ", price: basePrice, qty: 1, base: basePrice };
+            if (action === 'plus') cart[serviceName].qty += 1;
+            else if (action === 'minus' && cart[serviceName].qty > 1) cart[serviceName].qty -= 1;
+            cart[serviceName].price = cart[serviceName].qty * cart[serviceName].base;
+            cart[serviceName].label = `${cart[serviceName].qty} ಗಂಟೆ`;
+            document.getElementById(`qty_${serviceName}`).innerText = cart[serviceName].qty;
+            speakKND(`${cart[serviceName].qty} ಗಂಟೆ, ${cart[serviceName].price} ರೂಪಾಯಿ.`);
+            updateTotal();
+        };
+
+        const updateTotal = () => {
+            let sub = 0;
+            for (let k in cart) sub += cart[k].price;
+            document.getElementById('totalDisp').innerText = "Total: ₹" + (sub - walletBalance);
         };
 
         window.startBooking = (method) => {
             const name = document.getElementById('uName').value;
+            const address = document.getElementById('uAddress').value;
+            const landmark = document.getElementById('uLandmark').value;
             const zone = document.getElementById('zoneSelect').value;
-            if(!name || !zone || Object.keys(cart).length === 0) { alert("ವಿವರಗಳನ್ನು ತುಂಬಿ!"); return; }
+            
+            if(!name || !address || !landmark || !zone || Object.keys(cart).length === 0) { 
+                alert("ಎಲ್ಲ ವಿವರಗಳನ್ನು (ಹೆಸರು, ವಿಳಾಸ, ಲ್ಯಾಂಡ್‌ಮಾರ್ಕ್) ಭರ್ತಿ ಮಾಡಿ!"); 
+                return; 
+            }
+            
             let services = ""; let total = 0;
             for (let k in cart) { services += `${k} (${cart[k].label}), `; total += cart[k].price; }
-            let finalAmt = total - walletBalance;
-
-            if(method === 'Online') {
-                window.open(`upi://pay?pa=9008272911@ybl&pn=FixMaamu&am=${finalAmt}&cu=INR`, '_blank');
-                setTimeout(() => { if(confirm("ಪಾವತಿ ಮಾಡಿದ್ದೀರಾ?")) finalize(name, zone, services, finalAmt, "Online"); }, 4000);
-            } else { finalize(name, zone, services, finalAmt, "Cash"); }
-        };
-
-        async function finalize(name, zone, services, amt, method) {
+            
             const bID = "FIX-" + Date.now();
             const time = bookingType === 'Schedule' ? document.getElementById('bDate').value + " " + document.getElementById('bTime').value : "Instant";
-            await update(ref(db, 'bookings/' + bID), { customer: name, zone: zone, services: services, amount: amt, payment: method, timing: time, status: "Confirmed", timestamp: new Date().toLocaleString() });
-            const msg = `*FIX MAAMU - ಹೊಸ ಬುಕಿಂಗ್!*%0A------------------%0A*ID:* ${bID}%0A*ಹೆಸರು:* ${name}%0A*ಸೇವೆ:* ${services}%0A*ಪಾವತಿ:* ${method}%0A*ಮೊತ್ತ:* ₹${amt}%0A*ಸಮಯ:* ${time}%0A------------------`;
-            window.open(`https://wa.me/${adminWhatsApp}?text=${msg}`, '_blank');
-            speakKND("ಬುಕಿಂಗ್ ಯಶಸ್ವಿಯಾಗಿದೆ.");
-            alert("Booking Confirmed!");
-            location.reload();
-        }
+            
+            // Firebase ಗೆ ಮಾಹಿತಿ ರವಾನೆ
+            update(ref(db, 'bookings/' + bID), { 
+                customer: name, address: address, landmark: landmark, zone: zone, 
+                services: services, amount: total, payment: method, timing: time, status: "Confirmed" 
+            });
+
+            const msg = `*FIX MAAMU - ಹೊಸ ಬುಕಿಂಗ್!*%0A------------------%0A*ID:* ${bID}%0A*ಹೆಸರು:* ${name}%0A*ವಿಳಾಸ:* ${address}%0A*ಲ್ಯಾಂಡ್‌ಮಾರ್ಕ್:* ${landmark}%0A*ಏರಿಯಾ:* ${zone}%0A*ಸೇವೆ:* ${services}%0A*ಮೊತ್ತ:* ₹${total}%0A*ಸಮಯ:* ${time}`;
+            
+            speakKND(`ಬುಕಿಂಗ್ ಯಶಸ್ವಿಯಾಗಿದೆ. ವಾಟ್ಸಾಪ್ ಸಂದೇಶ ಕಳುಹಿಸಲಾಗುತ್ತಿದೆ.`, () => {
+                window.open(`https://wa.me/${adminWhatsApp}?text=${msg}`, '_blank');
+                location.reload();
+            });
+        };
 
         onValue(ref(db, 'services'), (snapshot) => {
             let h = '';
             Object.values(snapshot.val() || {}).forEach((s, idx) => {
-                const icon = getIcon(s.name);
-                const p1 = s.prices['1h'] || 0;
-                const p2 = s.prices['2h'] || 0;
-                const p3 = s.prices['3h'] || 0;
-                h += `<div class="bg-[#0f172a] p-5 rounded-[30px] border border-slate-800 mb-6 shadow-xl">
-                    <div class="flex items-center gap-3 mb-4">
-                        <span class="text-2xl">${icon}</span>
-                        <h3 class="text-lg font-black italic text-white uppercase">${s.name}</h3>
-                    </div>
-                    <div class="flex items-center gap-2">
-                        <button id="b_${idx}_1" data-serv="${s.name}" onclick="updateSelection('${s.name}','1 ಗಂಟೆ',${p1},'b_${idx}_1',1)" class="flex-1 bg-slate-800 py-2 rounded-xl border border-slate-700 text-white transition-all">
-                            <p class="text-[10px] font-black italic">1 ಗಂಟೆ</p><p class="text-[9px] font-bold text-yellow-500">₹${p1}</p>
-                        </button>
-                        <button id="b_${idx}_2" data-serv="${s.name}" onclick="updateSelection('${s.name}','2 ಗಂಟೆ',${p2},'b_${idx}_2',2)" class="flex-1 bg-slate-800 py-2 rounded-xl border border-slate-700 text-white transition-all">
-                            <p class="text-[10px] font-black italic">2 ಗಂಟೆ</p><p class="text-[9px] font-bold text-yellow-500">₹${p2}</p>
-                        </button>
-                        <button id="b_${idx}_3" data-serv="${s.name}" onclick="updateSelection('${s.name}','3 ಗಂಟೆ',${p3},'b_${idx}_3',3)" class="flex-1 bg-slate-800 py-2 rounded-xl border border-slate-700 text-white transition-all">
-                            <p class="text-[10px] font-black italic">3 ಗಂಟೆ</p><p class="text-[9px] font-bold text-yellow-500">₹${p3}</p>
-                        </button>
-                        <div class="flex items-center bg-slate-900 rounded-xl border border-slate-700 p-1 ml-1">
-                            <button onclick="changeHours('${s.name}', ${p1}, 'minus')" class="w-7 h-7 flex items-center justify-center bg-slate-800 rounded-lg text-white font-bold">-</button>
-                            <span id="qty_${s.name}" class="px-2 text-[11px] font-black text-white italic">0</span>
-                            <button onclick="changeHours('${s.name}', ${p1}, 'plus')" class="w-7 h-7 flex items-center justify-center bg-yellow-500 rounded-lg text-black font-bold">+</button>
+                h += `<div class="bg-[#0f172a] p-4 rounded-[25px] border border-slate-800 mb-4">
+                    <h3 class="text-white font-black italic uppercase text-xs mb-3">${s.name}</h3>
+                    <div class="grid grid-cols-4 gap-2">
+                        <button id="b_${idx}_1" data-serv="${s.name}" onclick="updateSelection('${s.name}',${s.prices['1h']},'b_${idx}_1',1)" class="bg-slate-800 py-2 rounded-xl text-[9px] text-white font-bold">1h ₹${s.prices['1h']}</button>
+                        <button id="b_${idx}_2" data-serv="${s.name}" onclick="updateSelection('${s.name}',${s.prices['2h']},'b_${idx}_2',2)" class="bg-slate-800 py-2 rounded-xl text-[9px] text-white font-bold">2h ₹${s.prices['2h']}</button>
+                        <button id="b_${idx}_3" data-serv="${s.name}" onclick="updateSelection('${s.name}',${s.prices['3h']},'b_${idx}_3',3)" class="bg-slate-800 py-2 rounded-xl text-[9px] text-white font-bold">3h ₹${s.prices['3h']}</button>
+                        <div class="flex items-center bg-slate-900 rounded-xl px-1 border border-slate-700">
+                            <button onclick="changeHours('${s.name}',${s.prices['1h']},'minus')" class="flex-1 text-white font-bold">-</button>
+                            <span id="qty_${s.name}" class="px-1 text-xs text-yellow-500 font-black">0</span>
+                            <button onclick="changeHours('${s.name}',${s.prices['1h']},'plus')" class="flex-1 text-yellow-500 font-bold">+</button>
                         </div>
                     </div>
                 </div>`;
@@ -171,52 +122,46 @@
             document.getElementById('zoneSelect').innerHTML = z;
         });
     </script>
-    <style>
-        body { background: #000; font-family: sans-serif; -webkit-tap-highlight-color: transparent; }
-        .input-box { background: #0f172a; border: 1px solid #1e293b; border-radius: 20px; padding: 18px; width: 100%; color: white; font-style: italic; font-weight: 800; outline: none; }
-        input[type="date"], input[type="time"] { color-scheme: dark; }
-    </style>
 </head>
-<body class="p-5 max-w-md mx-auto italic text-white">
+<body class="bg-black p-5 max-w-md mx-auto italic text-white">
 
-    <div class="flex justify-between items-start mb-6">
-        <div><h1 class="text-4xl font-black italic text-yellow-500 tracking-tighter leading-none">FIX ಮಾಮು</h1><p class="text-slate-400 text-[10px] font-bold uppercase mt-1 tracking-widest">​"Help ಬೇಕಾ? ಕೆಲಸ ಮಾಮುದು, ಆರಾಮ ನಿಮ್ಮದು!" HOUSE HELP YOUR DOOR In 10Minutes</p></div>
-        <div class="bg-slate-900 px-4 py-2 rounded-2xl border border-slate-800 text-center"><p class="text-[8px] font-bold text-slate-500 uppercase">Wallet</p><p id="walletVal" class="text-green-500 font-black text-sm italic">₹0</p></div>
+    <div class="mb-6">
+        <h1 class="text-4xl font-black italic text-yellow-500 leading-none">FIX ಮಾಮು</h1>
+        <p class="text-yellow-500/80 text-[11px] font-bold mt-1 italic">​"Help ಬೇಕಾ? ಕೆಲಸ ಮಾಮುದು, ಆರಾಮ ನಿಮ್ಮದು!" HOUSE HELP YOUR DOOR IN 10MINUTES </p>
     </div>
 
     <div class="flex gap-3 mb-6">
-        <button id="instBtn" onclick="setBookingType('Instant')" class="flex-1 bg-yellow-500 text-black font-black py-4 rounded-2xl italic uppercase text-xs">Instant</button>
-        <button id="schBtn" onclick="setBookingType('Schedule')" class="flex-1 bg-slate-800 text-white font-black py-4 rounded-2xl italic uppercase text-xs">Schedule</button>
+        <button id="instBtn" onclick="setBookingType('Instant')" class="flex-1 bg-yellow-500 text-black font-black py-4 rounded-2xl uppercase text-[10px]">Instant</button>
+        <button id="schBtn" onclick="setBookingType('Schedule')" class="flex-1 bg-slate-800 text-white font-black py-4 rounded-2xl uppercase text-[10px]">Schedule</button>
     </div>
 
-    <div id="scheduleFields" class="hidden grid grid-cols-2 gap-3 mb-6"><input id="bDate" type="date" class="input-box text-xs"><input id="bTime" type="time" class="input-box text-xs"></div>
+    <div id="scheduleFields" class="hidden grid grid-cols-2 gap-3 mb-6">
+        <input id="bDate" type="date" class="bg-[#0f172a] border border-slate-800 p-4 rounded-2xl text-xs outline-none">
+        <input id="bTime" type="time" class="bg-[#0f172a] border border-slate-800 p-4 rounded-2xl text-xs outline-none">
+    </div>
 
     <div class="space-y-4 mb-8">
-        <select id="zoneSelect" class="input-box text-yellow-500"></select>
-        <input type="text" oninput="applyReferral(this.value)" placeholder="Referral Number (₹20 Off)" class="input-box border-dashed border-yellow-500/50 text-xs">
-        <input id="uName" type="text" placeholder="ಹೆಸರು&ವಿಳಾಸ (Name&Address)" class="input-box">
+        <select id="zoneSelect" class="w-full bg-[#0f172a] border border-slate-800 p-4 rounded-2xl text-yellow-500 font-bold outline-none"></select>
+        <input id="uName" type="text" placeholder="ನಿಮ್ಮ ಹೆಸರು (Name)" class="w-full bg-[#0f172a] border border-slate-800 p-4 rounded-2xl text-white font-bold outline-none">
+        <input id="uAddress" type="text" placeholder="ಪೂರ್ತಿ ವಿಳಾಸ (Full Address)" class="w-full bg-[#0f172a] border border-slate-800 p-4 rounded-2xl text-white font-bold outline-none">
+        <input id="uLandmark" type="text" placeholder="ಹತ್ತಿರದ ಗುರುತು (Near Landmark)" class="w-full bg-[#0f172a] border border-slate-800 p-4 rounded-2xl text-white font-bold outline-none">
     </div>
 
     <div id="serviceGrid"></div>
 
     <div id="payModal" class="hidden fixed inset-0 bg-black/95 flex items-center justify-center p-6 z-[100]">
-        <div class="bg-slate-900 p-8 rounded-[45px] border border-slate-800 w-full text-center">
-            <h2 class="text-xl font-black italic mb-6 uppercase tracking-tighter">Payment Option</h2>
-            <div class="space-y-4">
-                <button onclick="startBooking('Cash')" class="w-full bg-slate-800 py-5 rounded-2xl font-black italic text-white uppercase text-sm">Cash After Service</button>
-                <button onclick="startBooking('Online')" class="w-full bg-green-600 py-5 rounded-2xl font-black italic text-white uppercase text-sm">Pay Online (UPI)</button>
-                <button onclick="document.getElementById('payModal').classList.add('hidden')" class="text-slate-500 text-[10px] mt-4 uppercase">Close</button>
-            </div>
+        <div class="bg-slate-900 p-8 rounded-[40px] border border-slate-800 w-full text-center">
+            <h2 class="text-xl font-black mb-6 uppercase">Payment</h2>
+            <button onclick="startBooking('Cash')" class="w-full bg-slate-800 py-5 rounded-2xl font-black mb-4 uppercase">Cash</button>
+            <button onclick="startBooking('Online')" class="w-full bg-green-600 py-5 rounded-2xl font-black mb-4 uppercase">Online (UPI)</button>
+            <button onclick="document.getElementById('payModal').classList.add('hidden')" class="text-slate-500 text-xs mt-2">CLOSE</button>
         </div>
     </div>
 
-    <div class="h-40"></div>
-    <div class="fixed bottom-0 left-0 w-full p-6 bg-black/95 backdrop-blur-3xl border-t border-slate-900 rounded-t-[50px]">
-        <div class="flex justify-between items-center px-2">
-            <p id="totalDisp" class="text-3xl font-black text-white italic tracking-tighter leading-none">Total: ₹0</p>
-            <button onclick="document.getElementById('payModal').classList.remove('hidden')" class="bg-green-600 text-white font-black px-12 py-5 rounded-[22px] shadow-2xl uppercase italic active:scale-95 transition-all">BOOK</button>
-        </div>
+    <div class="h-32"></div>
+    <div class="fixed bottom-0 left-0 w-full p-6 bg-black/95 border-t border-slate-900 flex justify-between items-center rounded-t-[40px] backdrop-blur-md">
+        <p id="totalDisp" class="text-2xl font-black italic tracking-tighter">Total: ₹0</p>
+        <button onclick="document.getElementById('payModal').classList.remove('hidden')" class="bg-yellow-500 text-black font-black px-12 py-4 rounded-2xl uppercase italic">BOOK NOW</button>
     </div>
-
 </body>
 </html>
