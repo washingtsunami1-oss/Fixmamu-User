@@ -18,7 +18,6 @@
         const db = getDatabase(app);
 
         let cart = {}; 
-        let walletBalance = 0;
         let bookingType = "Instant";
         let adminWhatsApp = "919008272911";
 
@@ -62,18 +61,29 @@
         const updateTotal = () => {
             let sub = 0;
             for (let k in cart) sub += cart[k].price;
-            document.getElementById('totalDisp').innerText = "Total: ₹" + (sub - walletBalance);
+            document.getElementById('totalDisp').innerText = "Total: ₹" + sub;
         };
 
         window.startBooking = (method) => {
             const name = document.getElementById('uName').value;
+            let rawPhone = document.getElementById('uPhone').value.trim();
             const address = document.getElementById('uAddress').value;
             const landmark = document.getElementById('uLandmark').value;
             const zone = document.getElementById('zoneSelect').value;
             
-            if(!name || !address || !landmark || !zone || Object.keys(cart).length === 0) { 
-                alert("ಎಲ್ಲ ವಿವರಗಳನ್ನು (ಹೆಸರು, ವಿಳಾಸ, ಲ್ಯಾಂಡ್‌ಮಾರ್ಕ್) ಭರ್ತಿ ಮಾಡಿ!"); 
+            if(!name || !rawPhone || !address || !landmark || !zone || Object.keys(cart).length === 0) { 
+                alert("ದಯವಿಟ್ಟು ಎಲ್ಲ ವಿವರಗಳನ್ನು ಭರ್ತಿ ಮಾಡಿ!"); 
                 return; 
+            }
+
+            let finalPhone = rawPhone;
+            if (rawPhone.length === 10) {
+                finalPhone = "91" + rawPhone;
+            } else if (rawPhone.length === 12 && rawPhone.startsWith("91")) {
+                finalPhone = rawPhone;
+            } else {
+                alert("ದಯವಿಟ್ಟು ಸರಿಯಾದ 10 ಅಂಕಿಯ ಮೊಬೈಲ್ ಸಂಖ್ಯೆ ನೀಡಿ!");
+                return;
             }
             
             let services = ""; let total = 0;
@@ -82,17 +92,17 @@
             const bID = "FIX-" + Date.now();
             const time = bookingType === 'Schedule' ? document.getElementById('bDate').value + " " + document.getElementById('bTime').value : "Instant";
             
-            // Firebase ಗೆ ಮಾಹಿತಿ ರವಾನೆ
             update(ref(db, 'bookings/' + bID), { 
-                customer: name, address: address, landmark: landmark, zone: zone, 
-                services: services, amount: total, payment: method, timing: time, status: "Confirmed" 
-            });
-
-            const msg = `*FIX MAAMU - ಹೊಸ ಬುಕಿಂಗ್!*%0A------------------%0A*ID:* ${bID}%0A*ಹೆಸರು:* ${name}%0A*ವಿಳಾಸ:* ${address}%0A*ಲ್ಯಾಂಡ್‌ಮಾರ್ಕ್:* ${landmark}%0A*ಏರಿಯಾ:* ${zone}%0A*ಸೇವೆ:* ${services}%0A*ಮೊತ್ತ:* ₹${total}%0A*ಸಮಯ:* ${time}`;
-            
-            speakKND(`ಬುಕಿಂಗ್ ಯಶಸ್ವಿಯಾಗಿದೆ. ವಾಟ್ಸಾಪ್ ಸಂದೇಶ ಕಳುಹಿಸಲಾಗುತ್ತಿದೆ.`, () => {
-                window.open(`https://wa.me/${adminWhatsApp}?text=${msg}`, '_blank');
-                location.reload();
+                customer: name, phone: finalPhone, address: address, landmark: landmark, 
+                zone: zone, services: services, amount: total, payment: method, timing: time, status: "Confirmed" 
+            }).then(() => {
+                // --- WhatsApp Message Content (Fixed Address & Landmark) ---
+                const msg = `*FIX MAAMU - ಹೊಸ ಬುಕಿಂಗ್!*%0A------------------%0A*ID:* ${bID}%0A*ಹೆಸರು:* ${name}%0A*ಫೋನ್:* ${finalPhone}%0A*ವಿಳಾಸ:* ${address}%0A*ಲ್ಯಾಂಡ್‌ಮಾರ್ಕ್:* ${landmark}%0A*ಏರಿಯಾ:* ${zone}%0A*ಸೇವೆ:* ${services}%0A*ಮೊತ್ತ:* ₹${total}%0A*ಸಮಯ:* ${time}%0A*ಪಾವತಿ:* ${method}`;
+                
+                speakKND(`ಬುಕಿಂಗ್ ಯಶಸ್ವಿಯಾಗಿದೆ.`, () => {
+                    window.open(`https://wa.me/${adminWhatsApp}?text=${msg}`, '_blank');
+                    location.reload();
+                });
             });
         };
 
@@ -102,9 +112,9 @@
                 h += `<div class="bg-[#0f172a] p-4 rounded-[25px] border border-slate-800 mb-4">
                     <h3 class="text-white font-black italic uppercase text-xs mb-3">${s.name}</h3>
                     <div class="grid grid-cols-4 gap-2">
-                        <button id="b_${idx}_1" data-serv="${s.name}" onclick="updateSelection('${s.name}',${s.prices['1h']},'b_${idx}_1',1)" class="bg-slate-800 py-2 rounded-xl text-[9px] text-white font-bold">1h ₹${s.prices['1h']}</button>
-                        <button id="b_${idx}_2" data-serv="${s.name}" onclick="updateSelection('${s.name}',${s.prices['2h']},'b_${idx}_2',2)" class="bg-slate-800 py-2 rounded-xl text-[9px] text-white font-bold">2h ₹${s.prices['2h']}</button>
-                        <button id="b_${idx}_3" data-serv="${s.name}" onclick="updateSelection('${s.name}',${s.prices['3h']},'b_${idx}_3',3)" class="bg-slate-800 py-2 rounded-xl text-[9px] text-white font-bold">3h ₹${s.prices['3h']}</button>
+                        <button id="b_${idx}_1" data-serv="${s.name}" onclick="updateSelection('${s.name}',${s.prices['1h']},'b_${idx}_1',1)" class="bg-slate-800 py-2 rounded-xl text-[9px] text-white font-bold tracking-tighter">1h ₹${s.prices['1h']}</button>
+                        <button id="b_${idx}_2" data-serv="${s.name}" onclick="updateSelection('${s.name}',${s.prices['2h']},'b_${idx}_2',2)" class="bg-slate-800 py-2 rounded-xl text-[9px] text-white font-bold tracking-tighter">2h ₹${s.prices['2h']}</button>
+                        <button id="b_${idx}_3" data-serv="${s.name}" onclick="updateSelection('${s.name}',${s.prices['3h']},'b_${idx}_3',3)" class="bg-slate-800 py-2 rounded-xl text-[9px] text-white font-bold tracking-tighter">3h ₹${s.prices['3h']}</button>
                         <div class="flex items-center bg-slate-900 rounded-xl px-1 border border-slate-700">
                             <button onclick="changeHours('${s.name}',${s.prices['1h']},'minus')" class="flex-1 text-white font-bold">-</button>
                             <span id="qty_${s.name}" class="px-1 text-xs text-yellow-500 font-black">0</span>
@@ -117,17 +127,17 @@
         });
 
         onValue(ref(db, 'zones'), (snap) => {
-            let z = '<option value="">ನಿಮ್ಮ ಏರಿಯಾ ಆರಿಸಿ</option>';
+            let z = '<option value="">ನಿಮ್ಮ ಏರಿಯಾ ಆರಿಸಿ (Select Area)</option>';
             Object.values(snap.val() || {}).forEach(v => z += `<option value="${v.name}">${v.name}</option>`);
             document.getElementById('zoneSelect').innerHTML = z;
         });
     </script>
 </head>
-<body class="bg-black p-5 max-w-md mx-auto italic text-white">
+<body class="bg-black p-5 max-w-md mx-auto italic text-white font-sans select-none">
 
-    <div class="mb-6">
+    <div class="mb-8">
         <h1 class="text-4xl font-black italic text-yellow-500 leading-none">FIX ಮಾಮು</h1>
-        <p class="text-yellow-500/80 text-[11px] font-bold mt-1 italic">​"Help ಬೇಕಾ?HOUSE HELP YOUR DOOR IN 10MINUTES </p>
+        <p class="text-slate-500 text-[10px] font-black uppercase tracking-[3px] mt-2 italic">HOUSE HELP YOUR DOOR IN 10MINUTES</p>
     </div>
 
     <div class="flex gap-3 mb-6">
@@ -136,32 +146,38 @@
     </div>
 
     <div id="scheduleFields" class="hidden grid grid-cols-2 gap-3 mb-6">
-        <input id="bDate" type="date" class="bg-[#0f172a] border border-slate-800 p-4 rounded-2xl text-xs outline-none">
-        <input id="bTime" type="time" class="bg-[#0f172a] border border-slate-800 p-4 rounded-2xl text-xs outline-none">
+        <input id="bDate" type="date" class="bg-[#0f172a] border border-slate-800 p-4 rounded-2xl text-xs outline-none text-white">
+        <input id="bTime" type="time" class="bg-[#0f172a] border border-slate-800 p-4 rounded-2xl text-xs outline-none text-white">
     </div>
 
-    <div class="space-y-4 mb-8">
-        <select id="zoneSelect" class="w-full bg-[#0f172a] border border-slate-800 p-4 rounded-2xl text-yellow-500 font-bold outline-none"></select>
-        <input id="uName" type="text" placeholder="ನಿಮ್ಮ ಹೆಸರು (Name)" class="w-full bg-[#0f172a] border border-slate-800 p-4 rounded-2xl text-white font-bold outline-none">
-        <input id="uAddress" type="text" placeholder="ಪೂರ್ತಿ ವಿಳಾಸ (Full Address)" class="w-full bg-[#0f172a] border border-slate-800 p-4 rounded-2xl text-white font-bold outline-none">
-        <input id="uLandmark" type="text" placeholder="ಹತ್ತಿರದ ಗುರುತು (Near Landmark)" class="w-full bg-[#0f172a] border border-slate-800 p-4 rounded-2xl text-white font-bold outline-none">
+    <div class="space-y-3 mb-8">
+        <select id="zoneSelect" class="w-full bg-[#0f172a] border border-slate-800 p-4 rounded-2xl text-yellow-500 font-black outline-none text-xs"></select>
+        <input id="uName" type="text" placeholder="ನಿಮ್ಮ ಹೆಸರು (Full Name)" class="w-full bg-[#0f172a] border border-slate-800 p-4 rounded-2xl text-white font-bold outline-none text-xs">
+        
+        <div class="relative">
+            <span class="absolute left-4 top-4 text-slate-500 font-bold text-xs">+91</span>
+            <input id="uPhone" type="number" placeholder="WhatsApp Number" class="w-full bg-[#0f172a] border border-slate-800 p-4 pl-12 rounded-2xl text-white font-bold outline-none text-xs">
+        </div>
+
+        <input id="uAddress" type="text" placeholder="ಪೂರ್ತಿ ವಿಳಾಸ (Full Address)" class="w-full bg-[#0f172a] border border-slate-800 p-4 rounded-2xl text-white font-bold outline-none text-xs">
+        <input id="uLandmark" type="text" placeholder="ಹತ್ತಿರದ ಗುರುತು (Landmark)" class="w-full bg-[#0f172a] border border-slate-800 p-4 rounded-2xl text-white font-bold outline-none text-xs">
     </div>
 
     <div id="serviceGrid"></div>
 
-    <div id="payModal" class="hidden fixed inset-0 bg-black/95 flex items-center justify-center p-6 z-[100]">
+    <div id="payModal" class="hidden fixed inset-0 bg-black/95 flex items-center justify-center p-6 z-[100] backdrop-blur-sm">
         <div class="bg-slate-900 p-8 rounded-[40px] border border-slate-800 w-full text-center">
-            <h2 class="text-xl font-black mb-6 uppercase">Payment</h2>
-            <button onclick="startBooking('Cash')" class="w-full bg-slate-800 py-5 rounded-2xl font-black mb-4 uppercase">Cash</button>
-            <button onclick="startBooking('Online')" class="w-full bg-green-600 py-5 rounded-2xl font-black mb-4 uppercase">Online (UPI)</button>
-            <button onclick="document.getElementById('payModal').classList.add('hidden')" class="text-slate-500 text-xs mt-2">CLOSE</button>
+            <h2 class="text-2xl font-black mb-8 uppercase text-white italic">Payment</h2>
+            <button onclick="startBooking('Cash')" class="w-full bg-slate-800 py-5 rounded-2xl font-black mb-4 uppercase text-xs">Cash After Work</button>
+            <button onclick="startBooking('Online')" class="w-full bg-green-600 py-5 rounded-2xl font-black mb-6 uppercase text-xs">Online (UPI)</button>
+            <button onclick="document.getElementById('payModal').classList.add('hidden')" class="text-slate-500 font-black text-[10px] uppercase tracking-widest">Cancel</button>
         </div>
     </div>
 
     <div class="h-32"></div>
-    <div class="fixed bottom-0 left-0 w-full p-6 bg-black/95 border-t border-slate-900 flex justify-between items-center rounded-t-[40px] backdrop-blur-md">
-        <p id="totalDisp" class="text-2xl font-black italic tracking-tighter">Total: ₹0</p>
-        <button onclick="document.getElementById('payModal').classList.remove('hidden')" class="bg-yellow-500 text-black font-black px-12 py-4 rounded-2xl uppercase italic">BOOK NOW</button>
+    <div class="fixed bottom-0 left-0 w-full p-6 bg-black/90 border-t border-slate-900 flex justify-between items-center rounded-t-[40px] backdrop-blur-md z-50">
+        <p id="totalDisp" class="text-2xl font-black italic tracking-tighter text-white">Total: ₹0</p>
+        <button onclick="document.getElementById('payModal').classList.remove('hidden')" class="bg-yellow-500 text-black font-black px-10 py-4 rounded-2xl uppercase italic text-[11px]">BOOK NOW</button>
     </div>
 </body>
 </html>
