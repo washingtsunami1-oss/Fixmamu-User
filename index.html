@@ -3,192 +3,319 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Fix Maamu - Pro Version</title>
+    <title>Fix Maamu - Official User App</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
     
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/9.1.3/firebase-app.js";
-        import { getDatabase, ref, onValue, push } from "https://www.gstatic.com/firebasejs/9.1.3/firebase-database.js";
+        import { getDatabase, ref, onValue, push, remove, get } from "https://www.gstatic.com/firebasejs/9.1.3/firebase-database.js";
 
-        // Firebase Configuration
         const firebaseConfig = { databaseURL: "https://fixmamu-97dd2-default-rtdb.firebaseio.com" };
         const app = initializeApp(firebaseConfig);
         const db = getDatabase(app);
 
-        let cart = {};
-        let bookingType = "Instant";
+        let cart = {}; 
+        let bookingType = "Instant"; 
+        let currentUser = null;
+        let alertedIds = new Set();
+        let currentLang = localStorage.getItem("fixMamuLang") || "kn-IN";
 
-        // 🎙 PROFESSIONAL KANNADA VOICE (Refined)
+        const langData = {
+            "kn-IN": {
+                history: "ಹಿಸ್ಟರಿ", instant: "ತಕ್ಷಣ", schedule: "ನಂತರ",
+                name: "ಹೆಸರು", phone: "ಫೋನ್", area: "ಏರಿಯಾ ಆಯ್ಕೆ ಮಾಡಿ",
+                address: "ಪೂರ್ಣ ವಿಳಾಸ", landmark: "ಗುರುತು (Landmark)",
+                confirm: "ಖಚಿತಪಡಿಸಿ", total: "ಒಟ್ಟು", added: "ಸೇರಿಸಲಾಗಿದೆ",
+                removed: "ತೆಗೆದುಹಾಕಲಾಗಿದೆ", success: "ಬುಕಿಂಗ್ ಯಶಸ್ವಿಯಾಗಿದೆ",
+                hi: "ಹಾಯ್", fillAll: "ದಯವಿಟ್ಟು ಎಲ್ಲಾ ವಿವರಗಳನ್ನು ಭರ್ತಿ ಮಾಡಿ!",
+                selService: "ದಯವಿಟ್ಟು ಸೇವೆಯನ್ನು ಆಯ್ಕೆ ಮಾಡಿ!",
+                blocked: "ನಿಮ್ಮ ನಂಬರ್ ಬ್ಲಾಕ್ ಮಾಡಲಾಗಿದೆ. ಕಾರಣ ತಿಳಿಯಲು ಅಥವಾ ಅನ್ ಬ್ಲಾಕ್ ಮಾಡಲು ಫಿಕ್ಸ್ ಮಾಮು ಸಹಾಯವಾಣಿಯನ್ನ ಸಂಪರ್ಕಿಸಿ !",
+                timeAlert: "ನಿಮ್ಮ ಬುಕ್ ಮಾಡಿದ ಸರ್ವಿಸ್ ಸಮಯ ಮುಗಿದಿದೆ. ಹೆಚ್ಚಿನ ಸಮಯಕ್ಕೆ ಎಕ್ಸ್ಟ್ರಾ ಚಾರ್ಜ್ ಅನ್ವಯಿಸುತ್ತದೆ.",
+                pickDT: "ದಿನಾಂಕ ಮತ್ತು ಸಮಯ ಆಯ್ಕೆ ಮಾಡಿ"
+            },
+            "en-IN": {
+                history: "History", instant: "Instant", schedule: "Schedule",
+                name: "NAME", phone: "PHONE", area: "Select Area",
+                address: "FULL ADDRESS", landmark: "LANDMARK",
+                confirm: "Confirm", total: "Total", added: "Added",
+                removed: "Removed", success: "Booking Successful",
+                hi: "Hi", fillAll: "Please fill all details!",
+                selService: "Please select a service!",
+                blocked: "Your number is blocked!",
+                timeAlert: "Your booked service time has ended. Extra charges will apply for additional time.",
+                pickDT: "Pick Date & Time"
+            }
+        };
+
         window.speak = (text) => {
+            if (!window.speechSynthesis) return;
             window.speechSynthesis.cancel();
             const msg = new SpeechSynthesisUtterance(text);
-            const voices = window.speechSynthesis.getVoices();
-            const knVoice = voices.find(v => v.lang === 'kn-IN' && v.name.includes('Google')) || voices.find(v => v.lang === 'kn-IN');
-            
-            if (knVoice) msg.voice = knVoice;
-            msg.lang = "kn-IN";
-            msg.pitch = 1.0;
-            msg.rate = 0.88; 
+            let voices = window.speechSynthesis.getVoices();
+            let v = voices.find(v => v.lang.includes(currentLang));
+            if (v) msg.voice = v;
+            msg.lang = currentLang;
             window.speechSynthesis.speak(msg);
         };
 
-        window.speechSynthesis.onvoiceschanged = () => window.speechSynthesis.getVoices();
+        window.applyLanguage = (lang) => {
+            const d = langData[lang];
+            document.getElementById("histBtnText").innerText = d.history;
+            document.getElementById("instBtn").innerText = d.instant;
+            document.getElementById("schBtn").innerText = d.schedule;
+            uNameI.placeholder = d.name; phoneI.placeholder = d.phone;
+            addrI.placeholder = d.address; lMarkI.placeholder = d.landmark;
+            confirmBtn.innerText = d.confirm; totalLabel.innerText = d.total;
+        };
 
-        // 🛒 CART LOGIC
-        window.addService = (name, hrs, price, isIncrement = false) => {
-            if (!cart[name]) cart[name] = { qty: hrs, price: price };
-            else isIncrement ? cart[name].qty += 1 : cart[name].qty = hrs;
-            
-            speak(name + " ಆಯ್ಕೆ ಮಾಡಲಾಗಿದೆ.");
+        window.updateCart = (n, h, p) => {
+            cart[n] = { qty: h, price: p };
             renderCart();
+            speak(n + " " + h + (currentLang === "kn-IN" ? " ಗಂಟೆ" : " hours"));
+        };
+
+        window.incrementItem = (name, price) => {
+            let currentQty = cart[name] ? cart[name].qty : 0;
+            updateCart(name, currentQty + 1, price);
         };
 
         window.removeFromCart = (name) => {
             delete cart[name];
-            speak(name + " ತೆಗೆದುಹಾಕಲಾಗಿದೆ.");
             renderCart();
+            speak(langData[currentLang].removed);
         };
 
-        function renderCart() {
-            let t = 0; let html = "";
+        window.renderCart = () => {
+            let totalAmt = 0; let html = "";
             Object.keys(cart).forEach(k => {
-                let amt = cart[k].qty * cart[k].price; t += amt;
-                html += `
-                <div class="flex justify-between items-center bg-gray-900/80 p-3 rounded-2xl mb-2 border border-white/5 shadow-sm">
-                    <div>
-                        <p class="text-[10px] font-black text-yellow-500 uppercase italic">${k}</p>
-                        <p class="text-[9px] text-gray-400 font-bold">${cart[k].qty} ಗಂಟೆ x ₹${cart[k].price} = ₹${amt}</p>
-                    </div>
-                    <button onclick="removeFromCart('${k}')" class="text-red-500 p-2 active:scale-75 transition-all"><i class="fa fa-trash-alt"></i></button>
+                totalAmt += cart[k].qty * cart[k].price;
+                html += `<div class="flex justify-between items-center bg-gray-900 p-4 rounded-3xl mb-2 border border-white/5">
+                    <span class="text-[10px] font-black text-yellow-500 uppercase italic">${k} (${cart[k].qty}h)</span>
+                    <button onclick="removeFromCart('${k}')" class="text-red-500 p-2"><i class="fa fa-trash-alt text-xs"></i></button>
                 </div>`;
             });
-            cartItems.innerHTML = html;
-            total.innerText = "₹" + t;
-            cartSection.style.display = t > 0 ? "block" : "none";
+            cartItems.innerHTML = html; total.innerText = "₹" + totalAmt;
+            cartSection.style.display = totalAmt > 0 ? 'block' : 'none';
+        };
+
+        function startLiveTimer(startTime, elementId, bookedHours, cardId, alertLineId) {
+            const timerInterval = setInterval(() => {
+                const el = document.getElementById(elementId);
+                const alertEl = document.getElementById(alertLineId);
+                if (!el) { clearInterval(timerInterval); return; }
+
+                const diff = new Date().getTime() - new Date(startTime).getTime();
+                if (isNaN(diff) || diff < 0) { el.innerText = "0h 0m 0s"; return; }
+
+                const h = Math.floor(diff / 3600000), m = Math.floor((diff % 3600000) / 60000), s = Math.floor((diff % 60000) / 1000);
+                el.innerText = `${h}h ${m}m ${s}s`;
+
+                if (diff > (bookedHours * 3600000)) {
+                    if (alertEl) alertEl.style.display = 'block';
+                    document.getElementById(cardId)?.classList.add('glow-red');
+                    if (!alertedIds.has(cardId)) {
+                        speak(langData[currentLang].timeAlert);
+                        alertedIds.add(cardId);
+                    }
+                }
+            }, 1000);
         }
 
-        // 📅 TOGGLE LOGIC
-        window.setType = (type) => {
-            bookingType = type;
-            instBtn.className = type === 'Instant' ? 'flex-1 bg-yellow-500 text-black py-4 rounded-2xl font-black italic shadow-lg shadow-yellow-500/20 active:scale-95 transition-all' : 'flex-1 bg-gray-900 text-gray-500 py-4 rounded-2xl font-black italic';
-            schBtn.className = type === 'Schedule' ? 'flex-1 bg-yellow-500 text-black py-4 rounded-2xl font-black italic shadow-lg shadow-yellow-500/20 active:scale-95 transition-all' : 'flex-1 bg-gray-900 text-gray-500 py-4 rounded-2xl font-black italic';
-            scheduleBox.classList.toggle('hidden', type !== 'Schedule');
-            speak(type === "Instant" ? "ತಕ್ಷಣದ ಬುಕಿಂಗ್" : "ಶೆಡ್ಯೂಲ್ ಬುಕಿಂಗ್");
+        window.loginUser = () => {
+            const name = authName.value.trim();
+            const phone = authPhone.value.trim();
+            const lang = document.querySelector('input[name="langSelect"]:checked').value;
+
+            if(!name || phone.length < 10) return alert("Enter valid Name & WhatsApp Number!");
+            const verifyMsg = `ಹಾಯ್ ಫಿಕ್ಸ್ ಮಾಮು, ನನ್ನ ನಂಬರ್ ವೆರಿಫೈ ಮಾಡಿ. ಹೆಸರು: ${name}`;
+            window.open(`https://wa.me/919108151310?text=${encodeURIComponent(verifyMsg)}`, '_blank');
+
+            localStorage.setItem("fixMamuUser", JSON.stringify({name, phone}));
+            localStorage.setItem("fixMamuLang", lang);
+            location.reload();
         };
 
-        // 📦 LOAD DATA
-        onValue(ref(db, "services"), snap => {
-            let sHtml = "";
-            snap.forEach(s => {
-                let d = s.val();
-                sHtml += `
-                <div class="bg-gray-900 p-5 mb-4 rounded-[30px] border border-gray-800 shadow-xl">
-                    <b class="text-yellow-400 uppercase text-xs italic tracking-wider">${d.name}</b>
-                    <div class="grid grid-cols-4 gap-2 mt-3">
-                        <button onclick="addService('${d.name}',1,${d.price})" class="bg-black/40 p-2 rounded-2xl border border-white/5 active:bg-yellow-500 active:text-black">
-                            <span class="block text-[10px] font-black">1h</span>
-                            <span class="block text-[8px] text-gray-500">₹${d.price}</span>
-                        </button>
-                        <button onclick="addService('${d.name}',2,${d.price})" class="bg-black/40 p-2 rounded-2xl border border-white/5 active:bg-yellow-500 active:text-black">
-                            <span class="block text-[10px] font-black">2h</span>
-                            <span class="block text-[8px] text-gray-500">₹${d.price*2}</span>
-                        </button>
-                        <button onclick="addService('${d.name}',3,${d.price})" class="bg-black/40 p-2 rounded-2xl border border-white/5 active:bg-yellow-500 active:text-black">
-                            <span class="block text-[10px] font-black">3h</span>
-                            <span class="block text-[8px] text-gray-500">₹${d.price*3}</span>
-                        </button>
-                        <button onclick="addService('${d.name}',1,${d.price}, true)" class="bg-yellow-500 text-black rounded-2xl flex flex-col items-center justify-center active:scale-90 transition-all">
-                            <i class="fa fa-plus text-[10px]"></i>
-                            <span class="text-[7px] font-black uppercase">+1h</span>
-                        </button>
-                    </div>
-                </div>`;
-            });
-            servicesList.innerHTML = sHtml;
-        });
-
-        onValue(ref(db, "zones"), snap => {
-            let zOpt = '<option value="">Select Area / Zone</option>';
-            snap.forEach(z => zOpt += `<option>${z.val().name}</option>`);
-            zoneSelect.innerHTML = zOpt;
-        });
-
-        // 🚀 FINAL BOOKING & PROFESSIONAL WHATSAPP
         window.book = () => {
-            const name = nameI.value, phone = phoneI.value, addr = addrI.value, land = landI.value, zone = zoneSelect.value;
-            if(!name || !phone || !addr || !zone || Object.keys(cart).length === 0) {
-                speak("ದಯವಿಟ್ಟು ಎಲ್ಲಾ ವಿವರಗಳನ್ನು ಭರ್ತಿ ಮಾಡಿ");
-                return alert("Fill all details!");
+            const name = uNameI.value.trim(), phone = phoneI.value.trim(), zone = zoneSelect.value.trim(), addr = addrI.value.trim(), land = lMarkI.value.trim();
+            const schTime = document.getElementById("schDateInput").value;
+
+            if (!name || !phone || !zone || !addr || !land) {
+                alert(langData[currentLang].fillAll); speak(langData[currentLang].fillAll); return;
+            }
+            if (Object.keys(cart).length === 0) {
+                alert(langData[currentLang].selService); speak(langData[currentLang].selService); return;
+            }
+            if (bookingType === "Schedule" && !schTime) {
+                alert(langData[currentLang].pickDT); return;
             }
 
-            let sList = ""; let tAmt = 0;
-            Object.keys(cart).forEach(k => { 
-                sList += `${k} (${cart[k].qty} ಗಂಟೆ), `; 
-                tAmt += cart[k].qty * cart[k].price; 
-            });
+            get(ref(db, "blocked_users/" + phone)).then((snapshot) => {
+                if (snapshot.exists()) {
+                    alert(langData[currentLang].blocked);
+                    speak(langData[currentLang].blocked);
+                } else {
+                    const id = "FIX-" + Date.now();
+                    let servicesText = ""; let totalAmt = 0;
+                    Object.keys(cart).forEach(k => {
+                        servicesText += `${k} (${cart[k].qty}h), `;
+                        totalAmt += cart[k].qty * cart[k].price;
+                    });
 
-            const bID = "FIX-" + Date.now();
-            const timeInfo = bookingType === "Schedule" ? `${sDate.value} ${sTime.value}` : "Instant";
+                    push(ref(db, "bookings"), { 
+                        id, customer: name, phone: phone, address: addr, zone: zone, landmark: land,
+                        services: JSON.stringify(cart), status: "Pending", timestamp: Date.now(), 
+                        type: bookingType, scheduledAt: schTime || "Now"
+                    }).then(() => {
+                        speak(langData[currentLang].success);
+                        alert(langData[currentLang].success);
 
-            push(ref(db, "bookings"), { id: bID, customer: name, phone, address: addr, landmark: land, zone, services: sList, amount: tAmt, type: bookingType, status: "Pending" }).then(() => {
-                let waMsg = `*FIX MAAMU - ಹೊಸ ಬುಕಿಂಗ್!*%0A------------------%0A*ID:* ${bID}%0A*ಹೆಸರು:* ${name}%0A*ಫೋನ್:* ${phone}%0A*ವಿಳಾಸ:* ${addr}%0A*ಲ್ಯಾಂಡ್‌ಮಾರ್ಕ್:* ${land}%0A*ಏರಿಯಾ:* ${zone}%0A*ಸೇವೆ:* ${sList}%0A*ಮೊತ್ತ:* ₹${tAmt}%0A*ಸಮಯ:* ${timeInfo}%0A*ಪಾವತಿ:* Cash`;
-                
-                window.open(`https://wa.me/919108151310?text=${waMsg}`);
-                location.reload();
+                        const msg = `*FIX MAAMU - ಹೊಸ ಬುಕಿಂಗ್!*\n------------------\n*ID:* ${id}\n*ಹೆಸರು:* ${name}\n*ಫೋನ್:* ${phone}\n*ಸಮಯ:* ${schTime || "ತಕ್ಷಣ"}\n*ವಿಳಾಸ:* ${addr}\n*ಏರಿಯಾ:* ${zone}\n*ಸೇವೆ:* ${servicesText}\n*ಮೊತ್ತ:* ₹${totalAmt}`;
+                        window.open(`https://wa.me/919108151310?text=${encodeURIComponent(msg)}`, '_blank');
+                        cart = {}; renderCart();
+                    });
+                }
             });
         };
+
+        window.onload = () => {
+            currentUser = JSON.parse(localStorage.getItem("fixMamuUser"));
+            if(currentUser) { 
+                authOverlay.style.display='none'; mainContent.style.display='block'; 
+                userNameDisplay.innerText = currentUser.name.toUpperCase();
+                uNameI.value = currentUser.name; phoneI.value = currentUser.phone;
+                applyLanguage(currentLang);
+                
+                onValue(ref(db, "bookings"), (snap) => {
+                    let liveH = ""; let historyH = "";
+                    snap.forEach(c => {
+                        const d = c.val();
+                        if(d.phone === currentUser.phone) {
+                            const tid = `t-${c.key}`, cid = `c-${c.key}`, aid = `a-${c.key}`;
+                            let bH = 1; try { const sObj = JSON.parse(d.services); Object.keys(sObj).forEach(k => bH = sObj[k].qty); } catch(e) {}
+                            
+                            const card = `
+                            <div id="${cid}" class="bg-gray-900 border-l-4 border-yellow-500 p-5 rounded-3xl mb-4 relative overflow-hidden">
+                                <div class="flex justify-between mb-2">
+                                    <span class="text-[10px] font-black text-yellow-500 uppercase italic">${d.status}</span>
+                                    <button onclick="if(confirm('Delete?')) { import('https://www.gstatic.com/firebasejs/9.1.3/firebase-database.js').then(m => m.remove(m.ref(getDatabase(), 'bookings/${c.key}'))) }" class="text-red-500 text-xs"><i class="fa fa-trash-alt"></i></button>
+                                </div>
+                                <h3 class="text-xs font-bold text-white mb-2 uppercase italic">${d.status === 'Started' ? 'Service Active' : d.services}</h3>
+                                ${d.status === 'Started' ? `
+                                    <div class="p-3 bg-black/40 rounded-2xl flex justify-between items-center">
+                                        <span class="text-[9px] font-black italic">LIVE:</span>
+                                        <span id="${tid}" class="text-sm font-black text-white">0h 0m 0s</span>
+                                    </div>
+                                    <p id="${aid}" class="text-[8px] font-bold text-red-500 animate-pulse mt-2 text-center uppercase" style="display:none;">${langData[currentLang].timeAlert}</p>
+                                ` : `<p class="text-[9px] text-gray-500 italic">${d.scheduledAt !== "Now" ? "Time: "+d.scheduledAt : d.address}</p>`}
+                            </div>`;
+                            if(['Assigned', 'Accepted', 'Started'].includes(d.status)) liveH += card;
+                            historyH += card;
+                            if(d.status === 'Started' && d.startTime) setTimeout(() => startLiveTimer(d.startTime, tid, bH, cid, aid), 500);
+                        }
+                    });
+                    liveWorkStatus.innerHTML = liveH; historyList.innerHTML = historyH;
+                });
+
+                onValue(ref(db, "services"), s => {
+                    let h = ""; 
+                    s.forEach(x => { 
+                        const d = x.val();
+                        if(d && d.name) {
+                            h += `<div class="bg-gray-900 p-5 mb-4 rounded-[30px] border border-gray-800">
+                                <div class="flex justify-between items-center mb-1"><b class="text-yellow-400 uppercase text-xs italic tracking-widest">${d.name}</b><span class="text-[10px] text-green-500 font-bold">₹${d.price}/hr</span></div>
+                                <div class="grid grid-cols-4 gap-2 mt-3">
+                                    <button onclick="updateCart('${d.name}',1,${d.price})" class="bg-black/40 p-2 rounded-2xl text-[10px] font-black italic">1h</button>
+                                    <button onclick="updateCart('${d.name}',2,${d.price})" class="bg-black/40 p-2 rounded-2xl text-[10px] font-black italic">2h</button>
+                                    <button onclick="updateCart('${d.name}',3,${d.price})" class="bg-black/40 p-2 rounded-2xl text-[10px] font-black italic">3h</button>
+                                    <button onclick="incrementItem('${d.name}',${d.price})" class="bg-yellow-500 text-black rounded-2xl font-black italic">+</button>
+                                </div>
+                            </div>`;
+                        }
+                    }); 
+                    servicesList.innerHTML = h || "<p class='text-[10px] opacity-20 italic'>No Services Available</p>";
+                });
+
+                onValue(ref(db, "zones"), s => {
+                    let z = `<option value="">${langData[currentLang].area}</option>`;
+                    s.forEach(x => {
+                        const d = x.val();
+                        if(d && d.name) {
+                            z += `<option value="${d.name}">${d.name}</option>`;
+                        }
+                    });
+                    zoneSelect.innerHTML = z;
+                });
+            } else { authOverlay.style.display='flex'; }
+        };
     </script>
+
     <style>
-        ::-webkit-scrollbar { display: none; }
-        input:focus, select:focus { border-color: #eab308 !important; }
+        .italic-black { font-style: italic; font-weight: 900; text-transform: uppercase; }
+        .glow-red { animation: pulse-border 1.5s infinite; border: 2px solid #ef4444 !important; }
+        @keyframes pulse-border { 0%, 100% { border-color: #ef4444; } 50% { border-color: transparent; } }
+        input[type="radio"]:checked + label { background: #EAB308; color: black; border-color: #EAB308; }
+        input[type="datetime-local"]::-webkit-calendar-picker-indicator { filter: invert(1); }
     </style>
 </head>
-<body class="bg-black text-white p-4 font-sans italic pb-48">
+<body class="bg-black text-white select-none pb-48 px-4" onclick="if(window.speechSynthesis.paused) window.speechSynthesis.resume();">
 
-    <div class="flex justify-between items-center mb-8 pt-4">
-        <div>
-            <h1 class="text-3xl font-black text-yellow-500 uppercase leading-none tracking-tighter">Fix Maamu</h1>
-            <p class="text-[10px] text-white opacity-60 uppercase tracking-[0.2em] mt-1 font-bold italic">Help in 20 Minutes</p>
+    <div id="mainContent" style="display:none;" class="pt-8 text-center">
+        <div class="flex justify-between items-center mb-6 px-2">
+            <h1 class="text-xl italic-black text-yellow-500">Hi, <span id="userNameDisplay">...</span></h1>
+            <div class="flex gap-2">
+                <button id="histBtnText" onclick="document.getElementById('historyOverlay').style.transform='translateY(0)';" class="bg-gray-900 px-4 py-2 rounded-full border border-white/10 text-[10px] italic-black text-yellow-500">HISTORY</button>
+                <button onclick="localStorage.clear(); location.reload();" class="bg-gray-900 px-4 py-2 rounded-full text-red-500"><i class="fa fa-power-off"></i></button>
+            </div>
         </div>
-        <button onclick="speak('ನಮಸ್ಕಾರ, ಫಿಕ್ಸ್ ಮಾಮು ಆಪ್‌ಗೆ ಸ್ವಾಗತ. ನಿಮಗೆ ಯಾವ ಸೇವೆ ಬೇಕು?')" class="w-12 h-12 bg-red-600 rounded-full flex items-center justify-center shadow-lg shadow-red-600/20 active:scale-90 transition-all border border-white/10">
-            <i class="fa fa-microphone text-white"></i>
-        </button>
-    </div>
 
-    <div class="flex gap-2 mb-6 bg-gray-900 p-1.5 rounded-[25px] border border-white/5">
-        <button id="instBtn" onclick="setType('Instant')" class="flex-1 bg-yellow-500 text-black py-4 rounded-2xl font-black text-xs uppercase shadow-lg shadow-yellow-500/20 transition-all">Instant</button>
-        <button id="schBtn" onclick="setType('Schedule')" class="flex-1 text-gray-500 py-4 rounded-2xl font-black text-xs uppercase transition-all">Schedule</button>
-    </div>
+        <div id="liveWorkStatus" class="mb-4"></div>
 
-    <div id="scheduleBox" class="hidden mb-6 grid grid-cols-2 gap-2 animate-pulse">
-        <input type="date" id="sDate" class="bg-gray-900 p-4 rounded-2xl text-xs text-white border border-gray-800 outline-none">
-        <input type="time" id="sTime" class="bg-gray-900 p-4 rounded-2xl text-xs text-white border border-gray-800 outline-none">
-    </div>
-
-    <div class="space-y-3 mb-10">
-        <select id="zoneSelect" class="w-full bg-gray-900 p-4 rounded-2xl text-xs text-white border border-gray-800 outline-none appearance-none font-bold italic"></select>
-        <input id="nameI" placeholder="Full Name" class="w-full bg-gray-900 p-4 rounded-2xl text-xs text-white border border-gray-800 outline-none bg-black/20">
-        <input id="phoneI" type="number" placeholder="Mobile Number" class="w-full bg-gray-900 p-4 rounded-2xl text-xs text-white border border-gray-800 outline-none bg-black/20">
-        <input id="addrI" placeholder="House Address" class="w-full bg-gray-900 p-4 rounded-2xl text-xs text-white border border-gray-800 outline-none bg-black/20">
-        <input id="landI" placeholder="Landmark" class="w-full bg-gray-900 p-4 rounded-2xl text-xs text-white border border-gray-800 outline-none bg-black/20">
-    </div>
-
-    <p class="text-[9px] font-black uppercase text-gray-600 mb-4 ml-2 tracking-[0.2em]">Available Services</p>
-    <div id="servicesList"></div>
-
-    <div id="cartSection" class="hidden mt-10 mb-6 bg-black/40 p-4 rounded-[30px] border border-dashed border-gray-800">
-        <p class="text-[9px] font-black uppercase text-yellow-600/50 mb-4 ml-1 tracking-widest">Selected Services (Tap trash to remove)</p>
-        <div id="cartItems"></div>
-    </div>
-
-    <div class="fixed bottom-0 left-0 w-full bg-black/80 backdrop-blur-xl p-6 border-t border-white/5 flex justify-between items-center z-50">
-        <div>
-            <p class="text-[8px] uppercase text-gray-500 font-black mb-1 tracking-tighter">Total Amount</p>
-            <h2 id="total" class="text-3xl font-black text-green-500 leading-none tracking-tighter">₹0</h2>
+        <div class="flex gap-2 mb-4 bg-gray-900 p-1.5 rounded-[25px]">
+            <button id="instBtn" onclick="bookingType='Instant'; this.className='flex-1 bg-yellow-500 text-black py-4 rounded-2xl italic-black text-[10px]'; schBtn.className='flex-1 bg-gray-900 text-gray-500 py-4 rounded-2xl italic-black text-[10px]'; scheduleBox.style.display='none';" class="flex-1 bg-yellow-500 text-black py-4 rounded-2xl italic-black text-[10px]">Instant</button>
+            <button id="schBtn" onclick="bookingType='Schedule'; this.className='flex-1 bg-yellow-500 text-black py-4 rounded-2xl italic-black text-[10px]'; instBtn.className='flex-1 bg-gray-900 text-gray-500 py-4 rounded-2xl italic-black text-[10px]'; scheduleBox.style.display='block';" class="flex-1 bg-gray-900 text-gray-500 py-4 rounded-2xl italic-black text-[10px]">Schedule</button>
         </div>
-        <button onclick="book()" class="bg-yellow-500 text-black px-12 py-5 rounded-[22px] font-black uppercase text-xs italic shadow-xl shadow-yellow-500/20 active:scale-95 transition-all">Book Now</button>
+
+        <div id="scheduleBox" style="display:none;" class="mb-6">
+            <input id="schDateInput" type="datetime-local" class="w-full bg-yellow-500/10 p-4 rounded-2xl text-xs text-yellow-500 border border-yellow-500/30 italic-black outline-none text-center">
+        </div>
+
+        <div class="space-y-3 mb-10">
+            <input id="uNameI" class="w-full bg-gray-900 p-4 rounded-2xl text-xs text-white border border-gray-800 italic-black outline-none text-center" readonly>
+            <input id="phoneI" class="w-full bg-gray-900 p-4 rounded-2xl text-xs text-white border border-gray-800 italic-black outline-none text-center" readonly>
+            <select id="zoneSelect" class="w-full bg-gray-900 p-4 rounded-2xl text-xs text-white border border-gray-800 italic-black outline-none text-center"></select>
+            <input id="addrI" class="w-full bg-gray-900 p-4 rounded-2xl text-xs text-white border border-gray-800 italic-black outline-none text-center">
+            <input id="lMarkI" class="w-full bg-gray-900 p-4 rounded-2xl text-xs text-white border border-gray-800 italic-black outline-none text-center">
+        </div>
+
+        <div id="servicesList"></div>
+        <div id="cartSection" class="hidden mt-6 p-4 rounded-3xl border border-dashed border-gray-800"><div id="cartItems"></div></div>
     </div>
 
+    <div id="historyOverlay" class="fixed inset-0 bg-black/95 z-[150] translate-y-full p-6 transition-transform duration-500 overflow-y-auto">
+        <div class="flex justify-between items-center mb-8">
+            <h2 class="text-2xl italic-black text-yellow-500">History</h2>
+            <button onclick="document.getElementById('historyOverlay').style.transform='translateY(100%)'" class="text-white text-3xl">×</button>
+        </div>
+        <div id="historyList"></div>
+    </div>
+
+    <div id="authOverlay" class="fixed inset-0 bg-black z-[200] flex flex-col justify-center p-10" style="display:none;">
+        <h1 class="text-5xl italic-black text-yellow-500 mb-8 text-center">Fix Maamu</h1>
+        <input id="authName" placeholder="ENTER NAME" class="w-full bg-gray-900 p-6 rounded-3xl italic-black text-xs text-center border border-gray-800 text-white outline-none mb-4">
+        <input id="authPhone" type="number" placeholder="WHATSAPP NUMBER" class="w-full bg-gray-900 p-6 rounded-3xl italic-black text-xs text-center border border-gray-800 text-white outline-none mb-6">
+        <div class="flex gap-4 mb-8">
+            <input type="radio" name="langSelect" id="lKn" value="kn-IN" class="hidden" checked>
+            <label for="lKn" class="flex-1 text-center p-4 border border-gray-800 rounded-2xl italic-black text-xs">ಕನ್ನಡ</label>
+            <input type="radio" name="langSelect" id="lEn" value="en-IN" class="hidden">
+            <label for="lEn" class="flex-1 text-center p-4 border border-gray-800 rounded-2xl italic-black text-xs">English</label>
+        </div>
+        <button onclick="loginUser()" class="w-full bg-yellow-500 text-black py-6 rounded-3xl italic-black text-sm">Verify via WhatsApp</button>
+    </div>
+
+    <div class="fixed bottom-0 left-0 w-full bg-black/95 p-6 border-t border-white/5 flex justify-between items-center z-50">
+        <div><p id="totalLabel" class="text-[8px] italic-black text-gray-500">TOTAL</p><h2 id="total" class="text-3xl italic-black text-green-500">₹0</h2></div>
+        <button id="confirmBtn" onclick="book()" class="bg-yellow-500 text-black px-12 py-5 rounded-[22px] italic-black text-xs">CONFIRM</button>
+    </div>
 </body>
 </html>
